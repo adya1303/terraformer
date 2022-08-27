@@ -224,7 +224,6 @@ func (g *VPCGenerator) InitResources() error {
 		listPlacementGroupsOptions := &vpcv1.ListPlacementGroupsOptions{}
 		start := ""
 		allrecs := []vpcv1.PlacementGroup{}
-		fmt.Println("came here")
 		for {
 			if start != "" {
 				listPlacementGroupsOptions.Start = &start
@@ -239,9 +238,7 @@ func (g *VPCGenerator) InitResources() error {
 				break
 			}
 		}
-		fmt.Println("came here too")
 		for _, pg := range allrecs {
-			fmt.Print(pg)
 			g.Resources = append(g.Resources, g.createPlacementGroupResources(*pg.ID, *pg.Name))
 		}
 	}
