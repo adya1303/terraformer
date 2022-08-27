@@ -114,6 +114,18 @@ func (g VPCGenerator) createVPCRouteTableRouteResources(vpcID, routeTableID, rou
 	return resource
 }
 
+func (g VPCGenerator) createPlacementGroupResources(PGroupID, PGroupName string) terraformutils.Resource {
+	resources := terraformutils.NewResource(
+		PGroupID,
+		normalizeResourceName(PGroupName, false),
+		"ibm_is_placement_group",
+		"ibm",
+		map[string]string{},
+		[]string{},
+		map[string]interface{}{})
+	return resources
+}
+
 // InitResources ...
 func (g *VPCGenerator) InitResources() error {
 	region := g.Args["region"].(string)
@@ -207,6 +219,30 @@ func (g *VPCGenerator) InitResources() error {
 			for _, tableroute := range tableroutes.Routes {
 				g.Resources = append(g.Resources, g.createVPCRouteTableRouteResources(*vpc.ID, *table.ID, *tableroute.ID, *tableroute.Name, dependsOn))
 			}
+		}
+
+		listPlacementGroupsOptions := &vpcv1.ListPlacementGroupsOptions{}
+		start := ""
+		allrecs := []vpcv1.PlacementGroup{}
+		fmt.Println("came here")
+		for {
+			if start != "" {
+				listPlacementGroupsOptions.Start = &start
+			}
+			placementGroupCollection, response, err := vpcclient.ListPlacementGroups(listPlacementGroupsOptions)
+			if err != nil {
+				return fmt.Errorf("ListPlacementGroupsWithContext failed %s\n%s", err, response)
+			}
+			start = GetNext(placementGroupCollection.Next)
+			allrecs = append(allrecs, placementGroupCollection.PlacementGroups...)
+			if start == "" {
+				break
+			}
+		}
+		fmt.Println("came here too")
+		for _, pg := range allrecs {
+			fmt.Print(pg)
+			g.Resources = append(g.Resources, g.createPlacementGroupResources(*pg.ID, *pg.Name))
 		}
 	}
 	return nil
