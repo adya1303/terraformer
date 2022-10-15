@@ -15,6 +15,7 @@
 package ibm
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -108,16 +109,27 @@ func (g *InstanceGroupGenerator) handleManagers(sess *vpcv1.VpcV1, instanceGroup
 		if err != nil {
 			g.fatalErrors <- fmt.Errorf("Error Getting InstanceGroup Manager: %s\n%s", err, response)
 		}
-		g.Resources = append(g.Resources, g.loadInstanceGroupManger(instanceGroupID, instanceGroupManagerID, *instanceGroupManager.Name, dependsOn))
+
+		instanceGroupManagerObj := vpcv1.InstanceGroupManager{}
+		result, err := json.Marshal(instanceGroupManager)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		err = json.Unmarshal(result, &instanceGroupManagerObj)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		g.Resources = append(g.Resources, g.loadInstanceGroupManger(instanceGroupID, instanceGroupManagerID, *instanceGroupManagerObj.Name, dependsOn))
 
 		policies := make([]string, 0)
-
-		for i := 0; i < len(instanceGroupManager.Policies); i++ {
-			policies = append(policies, *(instanceGroupManager.Policies[i].ID))
+		for i := 0; i < len(instanceGroupManagerObj.Policies); i++ {
+			policies = append(policies, *(instanceGroupManagerObj.Policies[i].ID))
 		}
 		policiesWG.Add(1)
 		dependsOn1 := makeDependsOn(dependsOn,
-			"ibm_is_instance_group_manger."+terraformutils.TfSanitize(*instanceGroupManager.Name))
+			"ibm_is_instance_group_manger."+terraformutils.TfSanitize(*instanceGroupManagerObj.Name))
 		go g.handlePolicies(sess, instanceGroupID, instanceGroupManagerID, policies, dependsOn1, &policiesWG)
 	}
 	policiesWG.Wait()
@@ -164,17 +176,23 @@ func (g *InstanceGroupGenerator) handleInstanceGroups(sess *vpcv1.VpcV1, waitGro
 
 // InitResources ...
 func (g *InstanceGroupGenerator) InitResources() error {
+	region := g.Args["region"].(string)
 	apiKey := os.Getenv("IC_API_KEY")
 	if apiKey == "" {
 		return fmt.Errorf("no API key set")
 	}
 
-	// Instantiate the service with an API key based IAM authenticator
-	sess, err := vpcv1.NewVpcV1(&vpcv1.VpcV1Options{
+	isURL := GetVPCEndPoint(region)
+	iamURL := GetAuthEndPoint()
+	vpcoptions := &vpcv1.VpcV1Options{
+		URL: isURL,
 		Authenticator: &core.IamAuthenticator{
 			ApiKey: apiKey,
+			URL:    iamURL,
 		},
-	})
+	}
+	sess, err := vpcv1.NewVpcV1(vpcoptions)
+
 	if err != nil {
 		return err
 	}
