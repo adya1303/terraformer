@@ -233,7 +233,7 @@ func (g *InstanceGroupGenerator) PostConvertHook() error {
 					continue
 				}
 				if rp.InstanceState.Attributes["instance_group_manager"] == rm.InstanceState.Attributes["id"] {
-					g.Resources[i].Item["instance_group_manager"] = "${ibm_is_instance_group_manager." + rg.ResourceName + ".id}"
+					g.Resources[i].Item["instance_group_manager"] = "${ibm_is_instance_group_manager." + rm.ResourceName + ".id}"
 				}
 				if rp.InstanceState.Attributes["instance_group"] == rg.InstanceState.Attributes["id"] {
 					g.Resources[i].Item["instance_group"] = "${ibm_is_instance_group." + rg.ResourceName + ".id}"
