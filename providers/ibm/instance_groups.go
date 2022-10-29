@@ -42,7 +42,7 @@ func (g *InstanceGroupGenerator) loadInstanceGroup(instanceGroupID, instanceGrou
 	return resources
 }
 
-func (g *InstanceGroupGenerator) loadInstanceGroupManger(instanceGroupID, instanceGroupManagerID, managerName string, dependsOn []string) terraformutils.Resource {
+func (g *InstanceGroupGenerator) loadInstanceGroupManager(instanceGroupID, instanceGroupManagerID, managerName string, dependsOn []string) terraformutils.Resource {
 	if managerName == "" {
 		managerName = fmt.Sprintf("manager-%d-%d", rand.Intn(100), rand.Intn(50))
 	}
@@ -59,7 +59,7 @@ func (g *InstanceGroupGenerator) loadInstanceGroupManger(instanceGroupID, instan
 	return resources
 }
 
-func (g *InstanceGroupGenerator) loadInstanceGroupMangerPolicy(instanceGroupID, instanceGroupManagerID, policyID, policyName string, dependsOn []string) terraformutils.Resource {
+func (g *InstanceGroupGenerator) loadInstanceGroupManagerPolicy(instanceGroupID, instanceGroupManagerID, policyID, policyName string, dependsOn []string) terraformutils.Resource {
 	if policyName == "" {
 		policyName = fmt.Sprintf("manager-%d-%d", rand.Intn(100), rand.Intn(50))
 	}
@@ -89,7 +89,7 @@ func (g *InstanceGroupGenerator) handlePolicies(sess *vpcv1.VpcV1, instanceGroup
 			g.fatalErrors <- fmt.Errorf("Error Getting InstanceGroup Manager Policy: %s\n%s", err, response)
 		}
 		instanceGroupManagerPolicy := data.(*vpcv1.InstanceGroupManagerPolicy)
-		g.Resources = append(g.Resources, g.loadInstanceGroupMangerPolicy(instanceGroupID,
+		g.Resources = append(g.Resources, g.loadInstanceGroupManagerPolicy(instanceGroupID,
 			instanceGroupManagerID,
 			instanceGroupManagerPolicyID,
 			*instanceGroupManagerPolicy.Name,
@@ -121,7 +121,7 @@ func (g *InstanceGroupGenerator) handleManagers(sess *vpcv1.VpcV1, instanceGroup
 			fmt.Println(err.Error())
 		}
 
-		g.Resources = append(g.Resources, g.loadInstanceGroupManger(instanceGroupID, instanceGroupManagerID, *instanceGroupManagerObj.Name, dependsOn))
+		g.Resources = append(g.Resources, g.loadInstanceGroupManager(instanceGroupID, instanceGroupManagerID, *instanceGroupManagerObj.Name, dependsOn))
 
 		policies := make([]string, 0)
 		for i := 0; i < len(instanceGroupManagerObj.Policies); i++ {
@@ -129,7 +129,7 @@ func (g *InstanceGroupGenerator) handleManagers(sess *vpcv1.VpcV1, instanceGroup
 		}
 		policiesWG.Add(1)
 		dependsOn1 := makeDependsOn(dependsOn,
-			"ibm_is_instance_group_manger."+terraformutils.TfSanitize(*instanceGroupManagerObj.Name))
+			"ibm_is_instance_group_manager."+terraformutils.TfSanitize(*instanceGroupManagerObj.Name))
 		go g.handlePolicies(sess, instanceGroupID, instanceGroupManagerID, policies, dependsOn1, &policiesWG)
 	}
 	policiesWG.Wait()
@@ -202,5 +202,46 @@ func (g *InstanceGroupGenerator) InitResources() error {
 	go g.handleInstanceGroups(sess, &instanceGroupWG)
 
 	instanceGroupWG.Wait() //nolint:govet
+	return nil
+}
+
+func (g *InstanceGroupGenerator) PostConvertHook() error {
+	for i, rm := range g.Resources {
+		if rm.InstanceInfo.Type != "ibm_is_instance_group_manager" {
+			continue
+		}
+		for _, rg := range g.Resources {
+			if rg.InstanceInfo.Type != "ibm_is_instance_group" {
+				continue
+			}
+			if rm.InstanceState.Attributes["instance_group"] == rg.InstanceState.Attributes["id"] {
+				g.Resources[i].Item["instance_group"] = "${ibm_is_instance_group." + rg.ResourceName + ".id}"
+			}
+		}
+	}
+
+	for i, rp := range g.Resources {
+		if rp.InstanceInfo.Type != "ibm_is_instance_group_manager_policy" {
+			continue
+		}
+		for _, rm := range g.Resources {
+			if rm.InstanceInfo.Type != "ibm_is_instance_group_manager" {
+				continue
+			}
+			for _, rg := range g.Resources {
+				if rg.InstanceInfo.Type != "ibm_is_instance_group" {
+					continue
+				}
+				if rp.InstanceState.Attributes["instance_group_manager"] == rm.InstanceState.Attributes["id"] {
+					g.Resources[i].Item["instance_group_manager"] = "${ibm_is_instance_group_manager." + rg.ResourceName + ".id}"
+				}
+				if rp.InstanceState.Attributes["instance_group"] == rg.InstanceState.Attributes["id"] {
+					g.Resources[i].Item["instance_group"] = "${ibm_is_instance_group." + rg.ResourceName + ".id}"
+				}
+
+			}
+		}
+	}
+
 	return nil
 }
